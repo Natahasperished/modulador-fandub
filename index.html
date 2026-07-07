@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabadora de Fandubs - Voces Moduladas</title>
+    <link rel="icon" href="Assets/2011x.ico" type="image/x-icon">
+    <style>
+        @font-face {
+            font-family: 'DeboouriaFont';
+            src: local('Arial'); 
+        }
+        body {
+            background-color: #2b0000;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        #panel_top {
+            background-color: black;
+            border: 2px solid #555;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .vol-indicator {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background-color: gray;
+            border: 2px solid white;
+            margin: 0 auto 10px auto;
+            transition: background-color 0.1s;
+        }
+        select, input[type="range"], button {
+            width: 100%;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            padding: 8px;
+            box-sizing: border-box;
+            background-color: #222;
+            color: white;
+            border: 1px solid #444;
+        }
+        button {
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        
+        #btn_permisos { background-color: #1a3a5f; padding: 12px; }
+        #btn_permisos:hover { background-color: #245285; }
+
+        #btn_record {
+            background-color: #880000;
+            font-size: 18px;
+            padding: 15px;
+            border: 3px solid #ff5555;
+            border-radius: 5px;
+            width: 100%;
+            max-width: 400px;
+        }
+        #btn_record.recording {
+            background-color: red;
+            border-color: white;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        #btn_download_wav { background-color: #1e4d2b; padding: 12px; margin-top: 10px; }
+        #btn_download_wav:hover { background-color: #2b703e; }
+
+        #gif_container img {
+            width: 250px;
+            height: 250px;
+            object-fit: cover;
+            border-radius: 5px;
+            background-color: #111;
+        }
+        .hidden { display: none !important; }
+        .label-green { color: #00FF00; font-weight: bold; font-size: 12px;}
+        
+        /* Reproductor de Audio */
+        audio {
+            width: 100%;
+            max-width: 400px;
+            margin-top: 15px;
+            outline: none;
+        }
+
+        /* Mascota Cyprinathos */
+        #mascota {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: transparent;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            z-index: 1000;
+        }
+        #mascota img { width: 150px; height: 150px; }
+        #caja_texto {
+            background-color: white;
+            padding: 3px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        #caja_interna {
+            background-color: black;
+            padding: 10px;
+            font-family: 'DeboouriaFont', sans-serif;
+            font-size: 14px;
+            min-height: 80px;
+            position: relative;
+        }
+        .botones-mascota {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .botones-mascota button {
+            width: auto; padding: 5px 15px; margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="panel_top">
+        <button id="btn_permisos" onclick="solicitarPermisos()">🎙️ ACTIVAR MICRÓFONOS</button>
+
+        <div id="vol_indicator" class="vol-indicator"></div>
+
+        <label style="font-size: 12px; font-weight: bold;">SELECCIONAR VOZ:</label>
+        <select id="combo_voz">
+            <option value="2011x">2011x</option>
+            <option value="fleetway">Fleetway</option>
+            <option value="furnace">Furnace</option>
+            <option value="bitcrusher">Bitcrusher</option>
+        </select>
+
+        <label class="label-green">VOLUMEN DE VOZ:</label>
+        <input type="range" id="slider_volumen" min="0.5" max="4.0" step="0.1" value="1.5">
+
+        <div id="frame_bitcrusher" class="hidden" style="border: 1px solid #444; padding: 10px; margin-bottom: 10px;">
+            <label class="label-green" style="display:block; margin-bottom:10px;">INTENSIDAD DE BITCRUSHER</label>
+            <label style="font-size: 12px;">Bit Depth (%)</label>
+            <input type="range" id="slider_bit_depth" min="1" max="100" value="50">
+            <label style="font-size: 12px;">Sample Reduction (%)</label>
+            <input type="range" id="slider_sample_reduction" min="1" max="100" value="50">
+        </div>
+
+        <label style="font-size: 12px;">ENTRADA (Tu Mic):</label>
+        <select id="combo_in">
+            <option value="default">Micrófono por defecto</option>
+        </select>
+    </div>
+
+    <div id="gif_container">
+        <img id="lbl_gif" src="Assets/fondo2011x.gif" alt="GIF de fondo" onerror="this.src='Assets/fondo.gif'">
+    </div>
+
+    <button id="btn_record" onclick="toggleRecording()" style="margin-top: 20px;">🔴 INICIAR GRABACIÓN</button>
+    
+    <audio id="audio_preview" controls class="hidden"></audio>
+    <button id="btn_download_wav" class="hidden" onclick="descargarWAV()">💾 GUARDAR COMO WAV</button>
+
+    <div id="mascota">
+        <img id="img_cy" src="Assets/Cy1.png" alt="Cyprinathos" onerror="this.style.display='none'">
+        <div id="caja_texto">
+            <div id="caja_interna">
+                <span id="txt_dialogo"></span>
+                <div id="frame_botones" class="botones-mascota hidden">
+                    <button onclick="opcionSi()">Sí</button>
+                    <button onclick="cerrarMascota()">No</button>
+                    <button onclick="opcionNunca()" style="color: gray; background: none; border: none; font-size: 11px;">No, y no volver a preguntar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- VARIABLES GLOBALES ---
+        let audioContext;
+        let mediaStreamSource;
+        let processor;
+        
+        let isRecording = false;
+        let recordedBuffers = [];
+        let recordedSampleRate = 44100;
+        let lastWavBlob = null;
+
+        let currentVoice = "2011x";
+        let bitDepthVal = 50;
+        let sampleReductionVal = 50;
+        let volumenGlobal = 1.5;
+        
+        const btnPermisos = document.getElementById('btn_permisos');
+        const btnRecord = document.getElementById('btn_record');
+        const comboVoz = document.getElementById('combo_voz');
+        const comboIn = document.getElementById('combo_in');
+        const sliderVol = document.getElementById('slider_volumen');
+        const frameBitcrusher = document.getElementById('frame_bitcrusher');
+        const lblGif = document.getElementById('lbl_gif');
+        const volIndicator = document.getElementById('vol_indicator');
+        const audioPreview = document.getElementById('audio_preview');
+        const btnDownloadWav = document.getElementById('btn_download_wav');
+
+        const gifs = {
+            "2011x": "Assets/fondo2011x.gif",
+            "fleetway": "Assets/fondofleetway.gif",
+            "furnace": "Assets/fondofurnace.gif",
+            "bitcrusher": "Assets/Glitch.gif"
+        };
+
+        // --- 1. SOLICITAR PERMISOS Y AHORA SÍ DETECTAR MICRÓFONOS (SOLO EN HTTPS/PRODUCCIÓN) ---
+        async function solicitarPermisos() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                btnPermisos.style.display = "none";
+                
+                // Liberar el stream inicial de prueba
+                stream.getTracks().forEach(track => track.stop());
+
+                // Listar los dispositivos reales del usuario
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                let mikes = devices.filter(d => d.kind === 'audioinput');
+                
+                if (mikes.length > 0) {
+                    comboIn.innerHTML = '';
+                    mikes.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        // Si no da etiqueta (por estar en local), pondrá un fallback, en web dará el nombre real
+                        option.text = device.label || `Micrófono (${device.deviceId.substring(0,5)}...)`;
+                        comboIn.appendChild(option);
+                    });
+                }
+            } catch (err) {
+                console.error("Error al pedir permisos:", err);
+                alert("Para grabar necesitas dar acceso al micrófono.");
+            }
+        }
+
+        // --- 2. SISTEMA DE GRABACIÓN ---
+        async function toggleRecording() {
+            if (!isRecording) {
+                iniciarGrabacion();
+            } else {
+                detenerGrabacion();
+            }
+        }
+
+        async function iniciarGrabacion() {
+            try {
+                if (audioContext) audioContext.close();
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                recordedSampleRate = audioContext.sampleRate;
+                
+                const inputId = comboIn.value;
+                const constraints = { audio: { echoCancellation: false, noiseSuppression: false } };
+                
+                if (inputId && inputId !== "default") {
+                    constraints.audio.deviceId = { exact: inputId };
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                btnPermisos.style.display = "none"; 
+
+                mediaStreamSource = audioContext.createMediaStreamSource(stream);
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                recordedBuffers = []; 
+                
+                processor.onaudioprocess = function(e) {
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    let outputData = new Float32Array(inputData.length);
+                    
+                    let sum = 0;
+                    for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
+                    let rms = Math.sqrt(sum / inputData.length);
+                    volIndicator.style.backgroundColor = (rms > 0.005) ? "#00FF00" : "gray";
+
+                    // Procesamiento de voces
+                    if (currentVoice === "bitcrusher" || currentVoice === "furnace") {
+                        let step = Math.max(1, Math.floor(1 + (sampleReductionVal / 100.0) * 20));
+                        if (currentVoice === "furnace") step = 4;
+                        
+                        let bits = Math.max(2, 16 - (bitDepthVal / 100.0) * 14);
+                        if (currentVoice === "furnace") bits = 6;
+                        let steps = Math.pow(2, bits);
+
+                        let lastVal = 0;
+                        for (let i = 0; i < inputData.length; i++) {
+                            if (i % step === 0) lastVal = Math.round(inputData[i] * steps) / steps;
+                            outputData[i] = lastVal * volumenGlobal;
+                        }
+                    } else if (currentVoice === "2011x" || currentVoice === "fleetway") {
+                        for (let i = 0; i < inputData.length; i++) {
+                            let val = inputData[i] * 1.5 * volumenGlobal; 
+                            outputData[i] = Math.max(-1, Math.min(1, val));
+                        }
+                    } else {
+                        for (let i = 0; i < inputData.length; i++) {
+                            outputData[i] = inputData[i] * volumenGlobal;
+                        }
+                    }
+
+                    if (isRecording) {
+                        recordedBuffers.push(new Float32Array(outputData));
+                    }
+                };
+
+                mediaStreamSource.connect(processor);
+                processor.connect(audioContext.destination);
+
+                isRecording = true;
+                btnRecord.className = "recording";
+                btnRecord.innerHTML = "⏹️ DETENER GRABACIÓN";
+                
+                audioPreview.classList.add('hidden');
+                btnDownloadWav.classList.add('hidden');
+
+            } catch (err) {
+                console.error("Error al arrancar micro:", err);
+                alert("Asegúrate de dar permisos de micrófono en tu navegador.");
+            }
+        }
+
+        function detenerGrabacion() {
+            isRecording = false;
+            btnRecord.className = "";
+            btnRecord.innerHTML = "🔴 INICIAR NUEVA GRABACIÓN";
+            volIndicator.style.backgroundColor = "gray";
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            if (recordedBuffers.length > 0) {
+                lastWavBlob = crearArchivoWAV(recordedBuffers, recordedSampleRate);
+                const audioUrl = URL.createObjectURL(lastWavBlob);
+                
+                audioPreview.src = audioUrl;
+                audioPreview.classList.remove('hidden');
+                btnDownloadWav.classList.remove('hidden');
+            }
+        }
+
+        // --- 3. CODIFICADOR WAV EN TIEMPO REAL ---
+        function crearArchivoWAV(buffers, sampleRate) {
+            let length = 0;
+            for (let b of buffers) length += b.length;
+            let interleaved = new Float32Array(length);
+            let offset = 0;
+            for (let b of buffers) {
+                interleaved.set(b, offset);
+                offset += b.length;
+            }
+            
+            let buffer = new ArrayBuffer(44 + interleaved.length * 2);
+            let view = new DataView(buffer);
+            
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+            
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + interleaved.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); 
+            view.setUint16(22, 1, true); 
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true); 
+            view.setUint16(32, 2, true); 
+            view.setUint16(34, 16, true); 
+            writeString(view, 36, 'data');
+            view.setUint32(40, interleaved.length * 2, true);
+            
+            let p = 44;
+            for (let i = 0; i < interleaved.length; i++) {
+                let sample = Math.max(-1, Math.min(1, interleaved[i]));
+                sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(p, sample, true);
+                p += 2;
+            }
+            
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function descargarWAV() {
+            if (!lastWavBlob) return;
+            const url = URL.createObjectURL(lastWavBlob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `Fandub_${currentVoice}_${new Date().getTime()}.wav`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        // --- EVENTOS INTERFAZ ---
+        comboVoz.addEventListener('change', (e) => {
+            currentVoice = e.target.value;
+            lblGif.src = gifs[currentVoice] || "Assets/fondo.gif";
+            
+            if (currentVoice === "bitcrusher") {
+                frameBitcrusher.classList.remove('hidden');
+            } else {
+                frameBitcrusher.classList.add('hidden');
+            }
+        });
+
+        sliderVol.addEventListener('input', (e) => volumenGlobal = parseFloat(e.target.value));
+        sliderBitDepth.addEventListener('input', (e) => bitDepthVal = e.target.value);
+        sliderSampleReduction.addEventListener('input', (e) => sampleReductionVal = e.target.value);
+
+        // --- MASCOTA CYPRINATHOS ---
+        const mascotaDiv = document.getElementById('mascota');
+        const btnMascota = document.getElementById('frame_botones');
+        const imgCy = document.getElementById('img_cy');
+        let typeInterval;
+
+        function typeText(text, callback) {
+            document.getElementById('txt_dialogo').innerHTML = "";
+            let i = 0;
+            clearInterval(typeInterval);
+            typeInterval = setInterval(() => {
+                if (i < text.length) {
+                    let char = text.charAt(i);
+                    if(char === '\n') document.getElementById('txt_dialogo').innerHTML += "<br>";
+                    else document.getElementById('txt_dialogo').innerHTML += char;
+                    i++;
+                } else {
+                    clearInterval(typeInterval);
+                    if (callback) callback();
+                }
+            }, 30);
+        }
+
+        function initMascota() {
+            if (localStorage.getItem("cyprinathos_never_show") === "true") return;
+            mascotaDiv.style.display = "flex";
+            typeText("¿Necesitas ayuda para grabar?", () => {
+                btnMascota.classList.remove('hidden');
+            });
+        }
+
+        function opcionSi() {
+            btnMascota.classList.add('hidden');
+            imgCy.src = "Assets/Cy2.png";
+            typeText("1. Haz clic en ACTIVAR MICRÓFONOS.\n2. Selecciona tu micrófono en la lista.\n3. Presiona INICIAR GRABACIÓN.\n(Clic aquí para cerrar)", () => {
+                document.getElementById('caja_texto').onclick = cerrarMascota;
+            });
+        }
+
+        function cerrarMascota() {
+            mascotaDiv.style.display = "none";
+        }
+
+        function opcionNunca() {
+            localStorage.setItem("cyprinathos_never_show", "true");
+            cerrarMascota();
+        }
+
+        window.onload = () => {
+            setTimeout(initMascota, 2000);
+        };
+    </script>
+</body>
+</html>
